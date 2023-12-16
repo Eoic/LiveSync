@@ -24,6 +24,16 @@ const Scene = () => {
         viewportRef.current.resize(window.innerWidth, window.innerHeight);
     }, [viewportRef, appRef]);
 
+    const handleDrag = useCallback((event: PIXI.FederatedPointerEvent) => {
+        if (!dragTargetRef.current || !dragPointRef.current) {
+            return;
+        }
+
+        const delta = event.getLocalPosition(dragTargetRef.current.parent);
+        dragTargetRef.current.x = delta.x - dragPointRef.current.x;
+        dragTargetRef.current.y = delta.y - dragPointRef.current.y;
+    }, []);
+
     const handleDragStart = useCallback((event: PIXI.FederatedPointerEvent) => {
         event.stopPropagation();
         dragTargetRef.current = event.target as PIXI.DisplayObject;
@@ -31,17 +41,7 @@ const Scene = () => {
         dragPointRef.current.x -= dragTargetRef.current.x;
         dragPointRef.current.y -= dragTargetRef.current.y;
         dragTargetRef.current.parent.on('pointermove', handleDrag);
-    }, []);
-
-    const handleDrag = useCallback((event: PIXI.FederatedPointerEvent) => {
-        if (!dragTargetRef.current || !dragPointRef.current) {
-            return;
-        }
-        
-        const delta = event.getLocalPosition(dragTargetRef.current.parent);
-        dragTargetRef.current.x = delta.x - dragPointRef.current.x;
-        dragTargetRef.current.y = delta.y - dragPointRef.current.y;
-    }, []);
+    }, [handleDrag]);
 
     const handleDragEnd = useCallback((event: PIXI.FederatedPointerEvent) => {
         if (!dragTargetRef.current) {
@@ -96,6 +96,9 @@ const Scene = () => {
         worldCanvas.position.set(0, 0);
         
         viewport.onpointermove = (event) => {
+            const worldCenter = viewportRef.current!.center;
+            const worldPos = viewportRef.current!.toWorld(event.client);
+            console.log("World offset:", Math.round(worldPos.x - worldCenter.x), Math.round(worldPos.y - worldCenter.y));
             setMousePosition(viewport.toWorld(event.clientX, event.clientY));
         }
 
