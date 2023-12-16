@@ -1,7 +1,7 @@
 import { Toolbar } from '.';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { WORLD_HEIGHT, WORLD_WIDTH } from '../../constants';
 
 // https://davidfig.github.io/pixi-viewport/
@@ -12,8 +12,23 @@ const Scene = () => {
     const viewportRef = useRef<Viewport | null>(null);
     const dragPointRef = useRef<PIXI.IPointData | null>(null);
     const dragTargetRef = useRef<PIXI.IDisplayObjectExtended | null>(null);
+    const intervalId = useRef<number | undefined>();
+    const socketRef = useRef<WebSocket | null>(null);
+    const marker = useRef<PIXI.Sprite | null>(null);
 
-    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    // Awful, but keep this for now.
+    // const [_mousePosition, _setMousePosition] = useState({ x: 0, y: 0 });
+    const _mousePositionRef = useRef({ x: 0, y: 0 });
+
+    const setMousePosition = (position: { x: number, y: number}) => {
+        // _setMousePosition(position);
+        _mousePositionRef.current = position;
+    }
+
+    const getMousePosition = () => {
+        return _mousePositionRef.current;
+    }
+    // ---
 
     const handleResize = useCallback(() => {
         if (viewportRef.current === null || appRef.current === null) {
@@ -51,6 +66,41 @@ const Scene = () => {
         event.stopPropagation();
         dragTargetRef.current.parent.off('pointermove', handleDrag);
     }, [handleDrag]);
+
+    const handlePointerMove = useCallback((event: MouseEvent) => {
+        event.stopPropagation();
+        // const worldCenter = viewportRef.current!.center;
+        const worldPos = viewportRef.current!.toWorld({ x: event.clientX, y: event.clientY });
+        // const worldOffset = { x: WORLD_WIDTH / 2 - worldCenter.x, y: WORLD_HEIGHT / 2 - worldCenter.y };
+        // const worldPosNoOffset = { x: worldPos.x + worldOffset.x, y: worldPos.y + worldOffset.y }
+        setMousePosition(worldPos);
+    }, []);
+
+    const sendWorldPosition = useCallback(() => {
+        if (getMousePosition() && socketRef.current !== null && socketRef.current.readyState === 1) {
+            // console.log("Sending position...");
+            const payload = JSON.stringify({ type: 'position', position: getMousePosition() });
+            socketRef.current.send(payload);
+        }
+    }, []);
+
+    const handleMessage = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+            case 'position':
+                if (marker.current) {
+                    // console.log("setting position to", data.position)
+                    marker.current.position.set(data.position.x, data.position.y);
+                }
+
+                // console.log(data.position);
+                break;
+
+            default:
+                break;
+        }
+    }
 
     useEffect(() => {
         if (!rootRef.current || appRef.current) {
@@ -94,13 +144,9 @@ const Scene = () => {
         worldCanvas.width = WORLD_WIDTH;
         worldCanvas.height = WORLD_HEIGHT;
         worldCanvas.position.set(0, 0);
-        
-        viewport.onpointermove = (event) => {
-            const worldCenter = viewportRef.current!.center;
-            const worldPos = viewportRef.current!.toWorld(event.client);
-            console.log("World offset:", Math.round(worldPos.x - worldCenter.x), Math.round(worldPos.y - worldCenter.y));
-            setMousePosition(viewport.toWorld(event.clientX, event.clientY));
-        }
+        worldCanvas.interactive = true
+
+        window.addEventListener('pointermove', handlePointerMove);
 
         const square = viewport.addChild(new PIXI.Sprite(PIXI.Texture.WHITE));
         square.tint = 0xFF0FFA;
@@ -111,7 +157,7 @@ const Scene = () => {
         square.on('pointerdown', handleDragStart);
         square.on('pointerup', handleDragEnd);
         square.on('pointerupoutside', handleDragEnd);
-        
+        marker.current = square;
 
         // PIXI.Assets.load('react.png').then((texture) => {
         //     const react = new PIXI.Sprite(texture);
@@ -133,16 +179,43 @@ const Scene = () => {
 
         appRef.current = app;
         viewportRef.current = viewport;
-    }, [rootRef, appRef, handleDragStart, handleDragEnd]);
+
+        return () => {
+            // console.log('Why is this called?')
+            // window.removeEventListener('pointermove', handlePointerMove);
+        }
+    }, [
+        rootRef,
+        appRef,
+        handleDragStart,
+        handleDragEnd,
+        handlePointerMove
+    ]);
+
+    useEffect(() => {
+        intervalId.current = setInterval(sendWorldPosition, 10);
+        return () => clearInterval(intervalId.current);
+    }, [sendWorldPosition]);
 
     useEffect(() => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, [handleResize]);
 
+    useEffect(() => {
+        if (socketRef.current !== null) {
+            return;
+        }
+
+        // console.log('Setting up WebSocket instance.');
+        const socket = new WebSocket('ws://localhost:6789');
+        socket.addEventListener('message', handleMessage);
+        socketRef.current = socket;
+    }, []);
+
     return (
         <>
-            <Toolbar mousePosition={mousePosition} />
+            <Toolbar mousePosition={getMousePosition()} />
             <div ref={rootRef} />
         </>
     );

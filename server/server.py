@@ -3,6 +3,7 @@ import asyncio
 import websockets
 from websockets import WebSocketServerProtocol
 
+PORT = 6789
 USERS = set()
 
 def users_event():
@@ -22,9 +23,9 @@ async def handler(websocket: WebSocketServerProtocol):
         async for message in websocket:
             event = json.loads(message)
 
-            match event.type:
+            match event.get('type'):
                 case 'position':
-                    websockets.broadcast(USERS, position_event(event.position))
+                    websockets.broadcast(USERS - {websocket,}, position_event(event.get('position')))
                 case _:
                     pass
     finally:
@@ -33,7 +34,8 @@ async def handler(websocket: WebSocketServerProtocol):
         websockets.broadcast(USERS, users_event())
 
 async def main():
-    async with websockets.serve(handler, 'localhost', 6789):
+    async with websockets.serve(handler, 'localhost', PORT):
+        print('Server is running on port', PORT)
         await asyncio.Future()
 
 
