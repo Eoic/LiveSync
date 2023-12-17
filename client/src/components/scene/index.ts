@@ -1,4 +1,3 @@
-import Scene from './scene';
-import Toolbar from './toolbar';
+import { Scene } from './scene';
 
-export { Scene, Toolbar };
+export { Scene };

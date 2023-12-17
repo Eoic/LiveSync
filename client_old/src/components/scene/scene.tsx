@@ -138,7 +138,6 @@ const Scene = () => {
                 maxScale: 12.50,
             });
 
-
         const worldCanvas = viewport.addChild(new PIXI.Sprite(PIXI.Texture.WHITE))
         worldCanvas.tint = 0x3F00FF;
         worldCanvas.width = WORLD_WIDTH;
