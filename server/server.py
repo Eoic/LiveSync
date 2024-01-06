@@ -1,43 +1,88 @@
 import json
 import asyncio
 import websockets
+from uuid import UUID
 from websockets import WebSocketServerProtocol
 
 PORT = 6789
 USERS = set()
 
-def users_event():
-    return json.dumps({'type': 'users', 'connected': len(USERS)})
 
-def position_event(position):
-    return json.dumps({'type': 'position', 'position': position})
+def user_connected_msg(id: UUID):
+    return json.dumps({"type": "USER_CONNECT", "payload": {"id": str(id)}})
+
+
+def user_disconnected_msg(id: UUID):
+    return json.dumps({"type": "USER_DISCONNECT", "payload": {"id": str(id)}})
+
+
+def connections_msg(users: list[WebSocketServerProtocol], recipient_id: UUID):
+    print("Sending connections")
+
+    return json.dumps(
+        {
+            "type": "CONNECTIONS",
+            "payload": {
+                "users": list(
+                    map(
+                        lambda user: {
+                            "id": str(user.id),
+                            "owner": user.id == recipient_id,
+                        },
+                        users,
+                    )
+                )
+            },
+        }
+    )
+
+
+def position_event_msg(position):
+    return json.dumps({"type": "position", "position": position})
+
+
+def other_users(users: set, current_user: websockets.WebSocketServerProtocol):
+    return set(filter(lambda user: user.id != current_user.id, users))
+
 
 async def handler(websocket: WebSocketServerProtocol):
     global USERS
 
     try:
         USERS.add(websocket)
-        print('Connected user with id ', websocket.id)
-        websockets.broadcast(USERS, users_event())
+        print("Connected user with id ", websocket.id)
+        await websocket.send(connections_msg(USERS, websocket.id))
+        websockets.broadcast(
+            other_users(USERS, websocket), user_connected_msg(websocket.id)
+        )
 
         async for message in websocket:
             event = json.loads(message)
 
-            match event.get('type'):
-                case 'position':
-                    websockets.broadcast(USERS - {websocket,}, position_event(event.get('position')))
+            match event.get("type"):
+                case "position":
+                    websockets.broadcast(
+                        USERS
+                        - {
+                            websocket,
+                        },
+                        position_event_msg(event.get("position")),
+                    )
                 case _:
                     pass
     finally:
-        print('Disconnected user with id ', websocket.id)
+        print("Disconnected user with id ", websocket.id)
         USERS.remove(websocket)
-        websockets.broadcast(USERS, users_event())
+        websockets.broadcast(
+            other_users(USERS, websocket), user_disconnected_msg(websocket.id)
+        )
+
 
 async def main():
-    async with websockets.serve(handler, 'localhost', PORT):
-        print('Server is running on port', PORT)
+    async with websockets.serve(handler, "localhost", PORT):
+        print("Server is running on port", PORT)
         await asyncio.Future()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

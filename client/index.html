@@ -15,7 +15,10 @@
       <button @click="remove"> Remove </button>
 
       <template x-for="player in players">
-        <li x-text="player.id"></li>
+        <div>
+          <span x-text="player.id"></span>
+          <span x-show="player.owner"> (You) </span>
+        </div>
       </template>
     </div>
 

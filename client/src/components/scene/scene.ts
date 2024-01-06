@@ -24,7 +24,7 @@ export class Scene {
         this.setupWorldPlane(this.viewport);
         this.setupEvents();
 
-        console.log(AlpineJS.store('connections')[0].data)
+        // console.log(AlpineJS.store('connections').print())
     }
 
     setupEvents() {

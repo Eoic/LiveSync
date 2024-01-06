@@ -11,7 +11,7 @@ export class UIManager {
             AlpineJS.data(component.stateName, () => (component.element()));
         }
 
-        AlpineJS.store('connections', [{ data: 41 }])
+        AlpineJS.store('connections', { print: () => console.log('Hello') })
         AlpineJS.start();
     }
 }

@@ -1,26 +1,82 @@
-import { AlpineComponent } from 'alpinejs';
+import AlpineJS, { AlpineComponent } from 'alpinejs';
 
 type Connections = {
-    counter: number,
     players: { id: string }[],
-    add: () => void,
-    remove: () => void
+    socket: WebSocket | null,
+    addPlayer: (player: Player) => void,
+    removePlayer: (id: string) => void
 }
 
+type Player = {
+    id: string,
+    owner: boolean,
+}
+
+enum PayloadType {
+    UserConnect = 'USER_CONNECT',
+    UserDisconnect = 'USER_DISCONNECT',
+    Connections = 'CONNECTIONS',
+}
+
+type BasePayload<T> = {
+    type: T
+};
+
+type UserConnectPayload = {
+    payload: {
+        id: string,
+    }
+} & BasePayload<PayloadType.UserConnect>;
+
+type UserDisconnectPayload = {
+    payload: {
+        id: string,
+    }
+} & BasePayload<PayloadType.UserDisconnect>;
+
+type ConnectionsPayload = {
+    payload: {
+        users: Array<{ id: string, owner: boolean }>
+    }
+} & BasePayload<PayloadType.Connections>;
+
+type Payloads = UserConnectPayload | UserDisconnectPayload | ConnectionsPayload;
+
 export default (): AlpineComponent<Connections> => ({
-    counter: 0,
     players: [],
+    socket: null,
 
     init() {
-        console.log('Component mounted...');
+        this.socket = new WebSocket('ws://127.0.0.1:6789');
+
+        this.socket.onmessage = (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as Payloads;
+
+            switch (data.type) {
+                case 'USER_CONNECT':
+                    this.addPlayer({ id: data.payload.id, owner: false });
+                    break;
+                case 'USER_DISCONNECT':
+                    this.removePlayer(data.payload.id);
+                    break;
+                case 'CONNECTIONS':
+                    for (const user of data.payload.users) {
+                        this.addPlayer(user);
+                    }
+
+                    break;
+                default:
+                    console.warn('Unrecognized payload type:', data.type);
+                    break;
+            }
+        }
     },
 
-    add() {
-        this.players.push({ id: `Player ${this.counter}` });
-        this.counter++;
+    addPlayer(player) {
+        this.players.push(player);
     },
 
-    remove() {
-        this.players.pop();
+    removePlayer(id) {
+        this.players = this.players.filter((player) => player.id !== id);
     }
 });
