@@ -3,12 +3,14 @@ import { Viewport } from 'pixi-viewport';
 import { BACKGROUND_COLOR, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
 import { Position } from './types';
 import AlpineJS from 'alpinejs';
+import { EventType } from '../../managers/event-manager';
 
 export class Scene {
     private app: PIXI.Application<HTMLCanvasElement>;
     private viewport: Viewport;
     private dragTarget: PIXI.IDisplayObjectExtended | null;
     private dragPosition: PIXI.IPointData | null;
+    private players: Map<string, PIXI.Sprite> = new Map();
 
     constructor() {
         this.dragTarget = null;
@@ -18,6 +20,7 @@ export class Scene {
         this.handleDragStart = this.handleDragStart.bind(this);
         this.handleDragEnd = this.handleDragEnd.bind(this);
         this.handleResize = this.handleResize.bind(this);
+        this.handlePointerMove = this.handlePointerMove.bind(this);
 
         this.app = this.setupApp();
         this.viewport = this.setupViewport(this.app);
@@ -29,6 +32,37 @@ export class Scene {
 
     setupEvents() {
         window.addEventListener('resize', this.handleResize);
+
+        window.addEventListener(EventType.PlayerAdd, async (event: any) => {
+            if (event.detail.owner) {
+                return;
+            }
+
+            const cursor = this.createShape({ x: 0, y: 0 }, 25, { color: 0xFFF000, isDraggable: false });
+            this.viewport.addChild(cursor);
+            this.players.set(event.detail.id, cursor);
+        });
+
+        window.addEventListener(EventType.PlayerRemove, (event: any) => {
+            const player = this.players.get(event.detail.id);
+            this.players.delete(event.detail.id);
+
+            const childIndex = this.viewport.children.findIndex((item) => item === player);
+            this.viewport.removeChildAt(childIndex);
+        });
+
+        window.addEventListener(EventType.PlayerPositionChange, (event: any) => {
+            const player = this.players.get(event.detail.id);
+
+            if (player) {
+                // console.log('Setting position:', event.detail.position);
+                player.position.set(event.detail.position.x, event.detail.position.y);
+            }
+            // this.players.get(event.detail.id)?.position.set(event.detail.position);
+            // console.log(event.detail.position);
+        });
+
+        window.addEventListener('pointermove', this.handlePointerMove);
     }
 
     setupApp(): PIXI.Application<HTMLCanvasElement> {
@@ -79,19 +113,32 @@ export class Scene {
         plane.height = WORLD_HEIGHT;
         plane.position.set(0, 0);
         plane.eventMode = 'dynamic';
-        this.createShape({ x: 500, y: 700 }, 150);
+        
+        const shape = this.createShape({ x: 500, y: 700 }, 150);
+        viewport.addChild(shape);
     }
 
-    createShape(position: Position, size: number, color: number = 0xFF0FFA) {
+    createShape(
+        position: Position,
+        size: number,
+        settings: {
+            color: number,
+            isDraggable: boolean,
+        } = {
+                color: 0xFF0FFA,
+                isDraggable: false,
+            }
+    ): PIXI.Sprite {
         const shape = new PIXI.Sprite(PIXI.Texture.WHITE);
-        shape.tint = color;
+        shape.tint = settings.color;
         shape.width = shape.height = size;
         shape.position.set(position.x, position.y);
         shape.eventMode = 'dynamic';
         shape.on('pointerdown', this.handleDragStart);
         shape.on('pointerup', this.handleDragEnd);
         shape.on('pointerupoutside', this.handleDragEnd);
-        this.viewport.addChild(shape);
+        // this.viewport.addChild(shape);
+        return shape;
     }
 
     /**
@@ -144,5 +191,26 @@ export class Scene {
     handleResize(): void {
         this.app?.resize();
         this.viewport?.resize(window.innerWidth, window.innerHeight);
+    }
+
+    handlePointerMove(event: MouseEvent): void {
+        event.stopPropagation();
+
+        const worldPosition = this.viewport.toWorld({
+            x: event.clientX,
+            y: event.clientY,
+        });
+
+        const message = JSON.stringify({
+            type: 'PLAYER_POSITION',
+            payload: { position: worldPosition }
+        });
+
+        const socket = AlpineJS.store('socket') as WebSocket;
+
+        if (socket.OPEN) {
+            console.log('Sending world position.')
+            socket.send(message);
+        }
     }
 }

@@ -17,8 +17,6 @@ def user_disconnected_msg(id: UUID):
 
 
 def connections_msg(users: list[WebSocketServerProtocol], recipient_id: UUID):
-    print("Sending connections")
-
     return json.dumps(
         {
             "type": "CONNECTIONS",
@@ -37,8 +35,8 @@ def connections_msg(users: list[WebSocketServerProtocol], recipient_id: UUID):
     )
 
 
-def position_event_msg(position):
-    return json.dumps({"type": "position", "position": position})
+def position_event_msg(id: UUID, position: dict[float, float] = {'x': 0, 'y': 0}):
+    return json.dumps({"type": "PLAYER_POSITION", "payload": {"id": str(id), "position": position}})
 
 
 def other_users(users: set, current_user: websockets.WebSocketServerProtocol):
@@ -60,13 +58,10 @@ async def handler(websocket: WebSocketServerProtocol):
             event = json.loads(message)
 
             match event.get("type"):
-                case "position":
+                case "PLAYER_POSITION":
                     websockets.broadcast(
-                        USERS
-                        - {
-                            websocket,
-                        },
-                        position_event_msg(event.get("position")),
+                        other_users(USERS, websocket),
+                        position_event_msg(websocket.id, event.get("payload").get("position")),
                     )
                 case _:
                     pass

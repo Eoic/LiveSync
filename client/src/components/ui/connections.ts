@@ -1,21 +1,26 @@
 import AlpineJS, { AlpineComponent } from 'alpinejs';
+import { EventManager, EventType } from '../../managers/event-manager';
+import { WEB_SOCKET_URL } from '../../constants';
 
 type Connections = {
-    players: { id: string }[],
+    players: Player[],
     socket: WebSocket | null,
     addPlayer: (player: Player) => void,
-    removePlayer: (id: string) => void
+    removePlayer: (id: string) => void,
+    updatePlayerPosition: (player: Player) => void,
 }
 
-type Player = {
+export type Player = {
     id: string,
     owner: boolean,
+    position: { x: number, y: number },
 }
 
 enum PayloadType {
     UserConnect = 'USER_CONNECT',
     UserDisconnect = 'USER_DISCONNECT',
     Connections = 'CONNECTIONS',
+    PlayerPosition = 'PLAYER_POSITION',
 }
 
 type BasePayload<T> = {
@@ -34,27 +39,41 @@ type UserDisconnectPayload = {
     }
 } & BasePayload<PayloadType.UserDisconnect>;
 
+type PlayerPositionPayload = {
+    payload: {
+        id: string,
+        position: {
+            x: number,
+            y: number,
+        }
+    }
+} & BasePayload<PayloadType.PlayerPosition>;
+
 type ConnectionsPayload = {
     payload: {
-        users: Array<{ id: string, owner: boolean }>
+        users: Array<Player>
     }
 } & BasePayload<PayloadType.Connections>;
 
-type Payloads = UserConnectPayload | UserDisconnectPayload | ConnectionsPayload;
+type Payloads = 
+    UserConnectPayload | 
+    UserDisconnectPayload | 
+    ConnectionsPayload | 
+    PlayerPositionPayload;
 
 export default (): AlpineComponent<Connections> => ({
     players: [],
     socket: null,
 
     init() {
-        this.socket = new WebSocket('ws://127.0.0.1:6789');
-
+        this.socket = new WebSocket(WEB_SOCKET_URL);
+        
         this.socket.onmessage = (event: MessageEvent) => {
             const data = JSON.parse(event.data) as Payloads;
 
             switch (data.type) {
                 case 'USER_CONNECT':
-                    this.addPlayer({ id: data.payload.id, owner: false });
+                    this.addPlayer({ id: data.payload.id, owner: false, position: { x: 0, y: 0 } });
                     break;
                 case 'USER_DISCONNECT':
                     this.removePlayer(data.payload.id);
@@ -65,18 +84,41 @@ export default (): AlpineComponent<Connections> => ({
                     }
 
                     break;
+                case 'PLAYER_POSITION':
+                    this.updatePlayerPosition({ id: data.payload.id, position: data.payload.position, owner: false })
+                    break;
                 default:
                     console.warn('Unrecognized payload type:', data.type);
                     break;
             }
         }
+
+        this.socket.onerror = (error) => {
+            console.error('WebSocket error', error);
+        }
+
+        // Save socket object in a global scope.
+        AlpineJS.store('socket', this.socket);
     },
 
     addPlayer(player) {
         this.players.push(player);
+        !player.owner && EventManager.emit<Player>(EventType.PlayerAdd, player);
     },
 
     removePlayer(id) {
-        this.players = this.players.filter((player) => player.id !== id);
+        const removedPlayerIndex = this.players.findIndex((player) => player.id === id);
+
+        if (removedPlayerIndex === -1) {
+            console.error('Could not find player to remove with id:', id);
+            return;
+        }
+    
+        const removedPlayer = this.players.splice(removedPlayerIndex, 1)[0];
+        EventManager.emit<Player>(EventType.PlayerRemove, removedPlayer);
+    },
+
+    updatePlayerPosition(player) {
+        EventManager.emit<Player>(EventType.PlayerPositionChange, player);
     }
 });
