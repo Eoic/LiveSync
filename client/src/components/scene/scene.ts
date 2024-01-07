@@ -1,33 +1,35 @@
 import * as PIXI from 'pixi.js';
-import { Viewport } from 'pixi-viewport';
-import { BACKGROUND_COLOR, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
-import { Position } from './types';
 import AlpineJS from 'alpinejs';
+import { Position } from './types';
+import { Viewport } from 'pixi-viewport';
 import { EventType } from '../../managers/event-manager';
+import { BACKGROUND_COLOR, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
 
 export class Scene {
-    private app: PIXI.Application<HTMLCanvasElement>;
     private viewport: Viewport;
+    private app: PIXI.Application<HTMLCanvasElement>;
     private dragTarget: PIXI.IDisplayObjectExtended | null;
     private dragPosition: PIXI.IPointData | null;
-    private players: Map<string, PIXI.Sprite> = new Map();
+    private players: Map<string, PIXI.Sprite>;
+    private owner?: PIXI.Sprite;
 
     constructor() {
         this.dragTarget = null;
         this.dragPosition = null;
+        this.players = new Map();
 
+        // Event handlers.
         this.handleDrag = this.handleDrag.bind(this);
         this.handleDragStart = this.handleDragStart.bind(this);
         this.handleDragEnd = this.handleDragEnd.bind(this);
         this.handleResize = this.handleResize.bind(this);
         this.handlePointerMove = this.handlePointerMove.bind(this);
 
-        this.app = this.setupApp();
+        // Scene setup.
+        this.app = this.setupApp(document.body);
         this.viewport = this.setupViewport(this.app);
         this.setupWorldPlane(this.viewport);
         this.setupEvents();
-
-        // console.log(AlpineJS.store('connections').print())
     }
 
     setupEvents() {
@@ -35,6 +37,10 @@ export class Scene {
 
         window.addEventListener(EventType.PlayerAdd, async (event: any) => {
             if (event.detail.owner) {
+                console.log('Player add...')
+                const cursor = this.createShape({ x: 0, y: 0 }, 25, { color: 0x00FFF0, isDraggable: false });
+                this.viewport.addChild(cursor);
+                this.owner = cursor;
                 return;
             }
 
@@ -55,17 +61,17 @@ export class Scene {
             const player = this.players.get(event.detail.id);
 
             if (player) {
-                // console.log('Setting position:', event.detail.position);
-                player.position.set(event.detail.position.x, event.detail.position.y);
+                player.position.set(
+                    event.detail.position.x,
+                    event.detail.position.y
+                );
             }
-            // this.players.get(event.detail.id)?.position.set(event.detail.position);
-            // console.log(event.detail.position);
         });
 
         window.addEventListener('pointermove', this.handlePointerMove);
     }
 
-    setupApp(): PIXI.Application<HTMLCanvasElement> {
+    setupApp(container: HTMLElement): PIXI.Application<HTMLCanvasElement> {
         const app = new PIXI.Application({
             width: window.innerWidth,
             height: window.innerHeight,
@@ -75,7 +81,7 @@ export class Scene {
             antialias: true
         }) as PIXI.Application<HTMLCanvasElement>;
 
-        document.body.appendChild(app.view);
+        container.appendChild(app.view);
 
         return app;
     }
@@ -113,8 +119,8 @@ export class Scene {
         plane.height = WORLD_HEIGHT;
         plane.position.set(0, 0);
         plane.eventMode = 'dynamic';
-        
-        const shape = this.createShape({ x: 500, y: 700 }, 150);
+
+        const shape = this.createShape({ x: 500, y: 700 }, 150, { isDraggable: true });
         viewport.addChild(shape);
     }
 
@@ -122,29 +128,40 @@ export class Scene {
         position: Position,
         size: number,
         settings: {
-            color: number,
-            isDraggable: boolean,
-        } = {
-                color: 0xFF0FFA,
-                isDraggable: false,
-            }
+            color?: number,
+            isDraggable?: boolean,
+        }
     ): PIXI.Sprite {
+        if (!settings.color) {
+            settings.color = 0xFF0FFA;
+        }
+
+        if (!settings.isDraggable) {
+            settings.isDraggable = false;
+        }
+
         const shape = new PIXI.Sprite(PIXI.Texture.WHITE);
         shape.tint = settings.color;
         shape.width = shape.height = size;
         shape.position.set(position.x, position.y);
-        shape.eventMode = 'dynamic';
-        shape.on('pointerdown', this.handleDragStart);
-        shape.on('pointerup', this.handleDragEnd);
-        shape.on('pointerupoutside', this.handleDragEnd);
-        // this.viewport.addChild(shape);
+
+        if (settings.isDraggable) {
+            shape.eventMode = 'dynamic';
+            shape.on('pointerdown', this.handleDragStart);
+            shape.on('pointerup', this.handleDragEnd);
+            shape.on('pointerupoutside', this.handleDragEnd);
+        } else {
+            shape.eventMode = 'none';
+            shape.hitArea = new PIXI.Polygon([]);
+        }
+
         return shape;
     }
 
     /**
      * [EVENT HANDLER]
-     * 
-     * @param event Pointer event.
+     * Updates drag target position according to pointer position.
+     * @param event {PIXI.FederatedPointerEvent} Pointer event.
      */
     handleDrag(event: PIXI.FederatedPointerEvent): void {
         if (!this.dragTarget || !this.dragPosition) {
@@ -193,6 +210,10 @@ export class Scene {
         this.viewport?.resize(window.innerWidth, window.innerHeight);
     }
 
+    /**
+     * Send player cursor position to thw server.
+     * @param event {MouseEvent} Mouse event.
+     */
     handlePointerMove(event: MouseEvent): void {
         event.stopPropagation();
 
@@ -209,8 +230,10 @@ export class Scene {
         const socket = AlpineJS.store('socket') as WebSocket;
 
         if (socket.OPEN) {
-            console.log('Sending world position.')
+            this.owner?.position.set(worldPosition.x, worldPosition.y);
             socket.send(message);
+        } else {
+            console.warn('WebSocket connection is not open, cannot send position.');
         }
     }
 }

@@ -103,7 +103,7 @@ export default (): AlpineComponent<Connections> => ({
 
     addPlayer(player) {
         this.players.push(player);
-        !player.owner && EventManager.emit<Player>(EventType.PlayerAdd, player);
+        EventManager.emit<Player>(EventType.PlayerAdd, player);
     },
 
     removePlayer(id) {
