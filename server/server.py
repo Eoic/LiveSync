@@ -6,6 +6,7 @@ from websockets import WebSocketServerProtocol
 
 PORT = 6789
 USERS = set()
+UPDATE_RATE_HZ = 10
 
 
 def user_connected_msg(id: UUID):
@@ -43,6 +44,13 @@ def other_users(users: set, current_user: websockets.WebSocketServerProtocol):
     return set(filter(lambda user: user.id != current_user.id, users))
 
 
+async def send_world_state():
+    while True:
+        world_state = {"type": "WORLD_STATE", "payload": {"status": "OK"}}
+        websockets.broadcast(USERS, json.dumps(world_state))
+        await asyncio.sleep(1 / UPDATE_RATE_HZ)
+
+
 async def handler(websocket: WebSocketServerProtocol):
     global USERS
 
@@ -68,15 +76,18 @@ async def handler(websocket: WebSocketServerProtocol):
     finally:
         print("Disconnected user with id ", websocket.id)
         USERS.remove(websocket)
+
         websockets.broadcast(
             other_users(USERS, websocket), user_disconnected_msg(websocket.id)
         )
 
 
 async def main():
+    world_state_task = asyncio.create_task(send_world_state())
+
     async with websockets.serve(handler, "localhost", PORT):
         print("Server is running on port", PORT)
-        await asyncio.Future()
+        await world_state_task
 
 
 if __name__ == "__main__":
