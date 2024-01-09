@@ -1,6 +1,7 @@
 import AlpineJS, { AlpineComponent } from 'alpinejs';
 import { EventManager, EventType } from '../../managers/event-manager';
 import { WEB_SOCKET_URL } from '../../constants';
+import { Position } from '../scene/types';
 
 type Connections = {
     players: Player[],
@@ -21,6 +22,7 @@ enum PayloadType {
     UserDisconnect = 'USER_DISCONNECT',
     Connections = 'CONNECTIONS',
     PlayerPosition = 'PLAYER_POSITION',
+    WORLD_STATE = 'WORLD_STATE',
 }
 
 type BasePayload<T> = {
@@ -55,11 +57,20 @@ type ConnectionsPayload = {
     }
 } & BasePayload<PayloadType.Connections>;
 
+type WorldState = {
+    payload: {
+        id: string,
+        position: Position,
+        last_processed_input: number
+    }
+} & BasePayload<PayloadType.WORLD_STATE>;
+
 type Payloads = 
     UserConnectPayload | 
     UserDisconnectPayload | 
     ConnectionsPayload | 
-    PlayerPositionPayload;
+    PlayerPositionPayload |
+    WorldState;
 
 export default (): AlpineComponent<Connections> => ({
     players: [],
@@ -86,6 +97,10 @@ export default (): AlpineComponent<Connections> => ({
                     break;
                 case 'PLAYER_POSITION':
                     this.updatePlayerPosition({ id: data.payload.id, position: data.payload.position, owner: false })
+                    break;
+
+                case 'WORLD_STATE':
+                    console.log(data.payload)
                     break;
                 default:
                     console.warn('Unrecognized payload type:', data.type);

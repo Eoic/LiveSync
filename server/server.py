@@ -2,11 +2,38 @@ import json
 import asyncio
 import websockets
 from uuid import UUID
+from queue import Queue
+from dataclasses import dataclass, asdict
 from websockets import WebSocketServerProtocol
+
 
 PORT = 6789
 USERS = set()
 UPDATE_RATE_HZ = 10
+ENTITIES = dict()
+MSG_QUEUE = Queue()
+LAST_PROCESSED_INPUT = dict()
+
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+
+class Entity(object):
+    id: str
+    position: Point 
+    positions_buffer: list[Point]
+
+    def __init__(self, id):
+        self.id = id
+        self.position = Point(0, 0)
+        self.positions_buffer = []
+
+    def apply_input(self, input):
+        self.position.x = input.get("x")
+        self.position.y = input.get("y")
 
 
 def user_connected_msg(id: UUID):
@@ -44,18 +71,59 @@ def other_users(users: set, current_user: websockets.WebSocketServerProtocol):
     return set(filter(lambda user: user.id != current_user.id, users))
 
 
-async def send_world_state():
+def send_world_state():
+    world_state = dict()
+
+    for entity in ENTITIES.values():
+        world_state[entity.id] = {
+            'id': entity.id,
+            'position': asdict(entity.position),
+            # 'last_processed_input': LAST_PROCESSED_INPUT[entity.id]
+        }
+
+    if not len(world_state):
+        return
+
+    world_state = {"type": "WORLD_STATE", "payload": world_state}
+    websockets.broadcast(USERS, json.dumps(world_state))
+
+
+def process_inputs():
     while True:
-        world_state = {"type": "WORLD_STATE", "payload": {"status": "OK"}}
-        websockets.broadcast(USERS, json.dumps(world_state))
+        if MSG_QUEUE.empty():
+            break;
+
+        message = MSG_QUEUE.get()
+
+        id = message.get("id")
+        seq_id = message.get("seq_id")
+
+        print('Message', message)
+
+        ENTITIES[id].apply_input(message.get("position"))
+        LAST_PROCESSED_INPUT[id] = message.get("seq_id")
+
+    for user in USERS:
+        if LAST_PROCESSED_INPUT.get(str(user.id)) is not None:
+            print(f'LPI for player {user.id}: #{LAST_PROCESSED_INPUT[str(user.id)]}.')
+
+
+async def update():
+    while True:
+        process_inputs()
+        send_world_state()        
         await asyncio.sleep(1 / UPDATE_RATE_HZ)
 
 
 async def handler(websocket: WebSocketServerProtocol):
     global USERS
+    global MSG_QUEUE
+    global ENTITIES
 
     try:
         USERS.add(websocket)
+        ENTITIES[str(websocket.id)] = Entity(str(websocket.id))
+
         print("Connected user with id ", websocket.id)
         await websocket.send(connections_msg(USERS, websocket.id))
         websockets.broadcast(
@@ -67,10 +135,12 @@ async def handler(websocket: WebSocketServerProtocol):
 
             match event.get("type"):
                 case "PLAYER_POSITION":
-                    websockets.broadcast(
-                        other_users(USERS, websocket),
-                        position_event_msg(websocket.id, event.get("payload").get("position")),
-                    )
+                    MSG_QUEUE.put(event.get("payload"))
+                    print('Queue size', MSG_QUEUE.qsize())
+                    # websockets.broadcast(
+                    #     other_users(USERS, websocket),
+                    #     position_event_msg(websocket.id, event.get("payload").get("position")),
+                    # )
                 case _:
                     pass
     finally:
@@ -83,11 +153,11 @@ async def handler(websocket: WebSocketServerProtocol):
 
 
 async def main():
-    world_state_task = asyncio.create_task(send_world_state())
+    update_task = asyncio.create_task(update())
 
     async with websockets.serve(handler, "localhost", PORT):
         print("Server is running on port", PORT)
-        await world_state_task
+        await update_task
 
 
 if __name__ == "__main__":

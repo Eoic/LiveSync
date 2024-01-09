@@ -12,6 +12,8 @@ export class Scene {
     private dragPosition: PIXI.IPointData | null;
     private players: Map<string, PIXI.Sprite>;
     private owner?: PIXI.Sprite;
+    private ownerEntityId?: string;
+    private input_seq_id: number = 0;
 
     constructor() {
         this.dragTarget = null;
@@ -41,6 +43,7 @@ export class Scene {
                 const cursor = this.createShape({ x: 0, y: 0 }, 25, { color: 0x00FFF0, isDraggable: false });
                 this.viewport.addChild(cursor);
                 this.owner = cursor;
+                this.ownerEntityId = event.detail.id;
                 return;
             }
 
@@ -217,6 +220,10 @@ export class Scene {
     handlePointerMove(event: MouseEvent): void {
         event.stopPropagation();
 
+        if (!this.ownerEntityId) {
+            return;
+        }
+
         const worldPosition = this.viewport.toWorld({
             x: event.clientX,
             y: event.clientY,
@@ -224,7 +231,11 @@ export class Scene {
 
         const message = JSON.stringify({
             type: 'PLAYER_POSITION',
-            payload: { position: worldPosition }
+            payload: {
+                id: this.ownerEntityId,
+                position: worldPosition,
+                seq_id: this.input_seq_id++,
+            }
         });
 
         const socket = AlpineJS.store('socket') as WebSocket;
