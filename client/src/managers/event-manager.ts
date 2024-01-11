@@ -2,6 +2,7 @@ export enum EventType {
     PlayerAdd = 'PLAYER_ADD',
     PlayerRemove = 'PLAYER_REMOVE',
     PlayerPositionChange = 'PLAYER_POSITION_CHANGE',
+    WorldState = 'WORLD_STATE',
 };
 
 export class EventManager {

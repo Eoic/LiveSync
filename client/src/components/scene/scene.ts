@@ -13,12 +13,20 @@ export class Scene {
     private players: Map<string, PIXI.Sprite>;
     private owner?: PIXI.Sprite;
     private ownerEntityId?: string;
-    private input_seq_id: number = 0;
+    private inputSeqId: number = 0;
+    private pendingInputs: Array<object> = [];
+    private refreshRateHz: number = 60;
+    private ticker: PIXI.Ticker;
+    private serverMessages: Array<any> = [];
 
     constructor() {
         this.dragTarget = null;
         this.dragPosition = null;
         this.players = new Map();
+
+        // Game loop.
+        this.ticker = new PIXI.Ticker();
+        this.ticker.maxFPS = this.refreshRateHz;
 
         // Event handlers.
         this.handleDrag = this.handleDrag.bind(this);
@@ -32,6 +40,7 @@ export class Scene {
         this.viewport = this.setupViewport(this.app);
         this.setupWorldPlane(this.viewport);
         this.setupEvents();
+        this.setupGameLoop();
     }
 
     setupEvents() {
@@ -39,7 +48,6 @@ export class Scene {
 
         window.addEventListener(EventType.PlayerAdd, async (event: any) => {
             if (event.detail.owner) {
-                console.log('Player add...')
                 const cursor = this.createShape({ x: 0, y: 0 }, 25, { color: 0x00FFF0, isDraggable: false });
                 this.viewport.addChild(cursor);
                 this.owner = cursor;
@@ -60,18 +68,33 @@ export class Scene {
             this.viewport.removeChildAt(childIndex);
         });
 
-        window.addEventListener(EventType.PlayerPositionChange, (event: any) => {
-            const player = this.players.get(event.detail.id);
-
-            if (player) {
-                player.position.set(
-                    event.detail.position.x,
-                    event.detail.position.y
-                );
-            }
+        window.addEventListener(EventType.WorldState, (event: any) => {
+            this.serverMessages.push(event.detail);
         });
 
         window.addEventListener('pointermove', this.handlePointerMove);
+    }
+
+    setupGameLoop() {
+        this.ticker.add((deltaTime) => {
+            this.processServerMessages();
+
+            if (!this.ownerEntityId) {
+                return;
+            }
+    
+            // this.processInputs();
+            // this.interpolateEntities();
+        });
+        
+        this.ticker.start();
+    }
+
+    processServerMessages() {
+        console.log(this.serverMessages);
+        // Should merge server message sinto a flat list.
+        // Messages should be sorted by seq id.
+        // Should not send server messages with the same state over and over again (or without seq id)
     }
 
     setupApp(container: HTMLElement): PIXI.Application<HTMLCanvasElement> {
@@ -234,7 +257,7 @@ export class Scene {
             payload: {
                 id: this.ownerEntityId,
                 position: worldPosition,
-                seq_id: this.input_seq_id++,
+                seq_id: this.inputSeqId++,
             }
         });
 

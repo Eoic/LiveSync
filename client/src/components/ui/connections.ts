@@ -9,6 +9,7 @@ type Connections = {
     addPlayer: (player: Player) => void,
     removePlayer: (id: string) => void,
     updatePlayerPosition: (player: Player) => void,
+    updateWorld: (worldState: WorldState) => void,
 }
 
 export type Player = {
@@ -22,7 +23,7 @@ enum PayloadType {
     UserDisconnect = 'USER_DISCONNECT',
     Connections = 'CONNECTIONS',
     PlayerPosition = 'PLAYER_POSITION',
-    WORLD_STATE = 'WORLD_STATE',
+    WorldState = 'WORLD_STATE',
 }
 
 type BasePayload<T> = {
@@ -63,7 +64,7 @@ type WorldState = {
         position: Position,
         last_processed_input: number
     }
-} & BasePayload<PayloadType.WORLD_STATE>;
+} & BasePayload<PayloadType.WorldState>;
 
 type Payloads = 
     UserConnectPayload | 
@@ -100,7 +101,7 @@ export default (): AlpineComponent<Connections> => ({
                     break;
 
                 case 'WORLD_STATE':
-                    console.log(data.payload)
+                    this.updateWorld(data.payload as any);
                     break;
                 default:
                     console.warn('Unrecognized payload type:', data.type);
@@ -135,5 +136,9 @@ export default (): AlpineComponent<Connections> => ({
 
     updatePlayerPosition(player) {
         EventManager.emit<Player>(EventType.PlayerPositionChange, player);
+    },
+
+    updateWorld(worldState) {
+        EventManager.emit<WorldState>(EventType.WorldState, worldState);
     }
 });

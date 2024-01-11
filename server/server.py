@@ -78,7 +78,7 @@ def send_world_state():
         world_state[entity.id] = {
             'id': entity.id,
             'position': asdict(entity.position),
-            # 'last_processed_input': LAST_PROCESSED_INPUT[entity.id]
+            'last_processed_input': LAST_PROCESSED_INPUT.get(entity.id)
         }
 
     if not len(world_state):
@@ -98,10 +98,8 @@ def process_inputs():
         id = message.get("id")
         seq_id = message.get("seq_id")
 
-        print('Message', message)
-
         ENTITIES[id].apply_input(message.get("position"))
-        LAST_PROCESSED_INPUT[id] = message.get("seq_id")
+        LAST_PROCESSED_INPUT[id] = seq_id
 
     for user in USERS:
         if LAST_PROCESSED_INPUT.get(str(user.id)) is not None:
@@ -136,11 +134,6 @@ async def handler(websocket: WebSocketServerProtocol):
             match event.get("type"):
                 case "PLAYER_POSITION":
                     MSG_QUEUE.put(event.get("payload"))
-                    print('Queue size', MSG_QUEUE.qsize())
-                    # websockets.broadcast(
-                    #     other_users(USERS, websocket),
-                    #     position_event_msg(websocket.id, event.get("payload").get("position")),
-                    # )
                 case _:
                     pass
     finally:
