@@ -139,6 +139,7 @@ async def handler(websocket: WebSocketServerProtocol):
     finally:
         print("Disconnected user with id ", websocket.id)
         USERS.remove(websocket)
+        del ENTITIES[str(websocket.id)]
 
         websockets.broadcast(
             other_users(USERS, websocket), user_disconnected_msg(websocket.id)
