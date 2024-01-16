@@ -9,7 +9,7 @@ from websockets import WebSocketServerProtocol
 
 PORT = 6789
 USERS = set()
-UPDATE_RATE_HZ = 10
+UPDATE_RATE_HZ = 60
 ENTITIES = dict()
 MSG_QUEUE = Queue()
 LAST_PROCESSED_INPUT = dict()
@@ -32,28 +32,28 @@ class Entity(object):
         self.positions_buffer = []
 
     def apply_input(self, input):
-        self.position.x = input.get("x")
-        self.position.y = input.get("y")
+        self.position.x = input.get('x')
+        self.position.y = input.get('y')
 
 
 def user_connected_msg(id: UUID):
-    return json.dumps({"type": "USER_CONNECT", "payload": {"id": str(id)}})
+    return json.dumps({'type': 'USER_CONNECT', 'payload': {'id': str(id)}})
 
 
 def user_disconnected_msg(id: UUID):
-    return json.dumps({"type": "USER_DISCONNECT", "payload": {"id": str(id)}})
+    return json.dumps({'type': 'USER_DISCONNECT', 'payload': {'id': str(id)}})
 
 
 def connections_msg(users: list[WebSocketServerProtocol], recipient_id: UUID):
     return json.dumps(
         {
-            "type": "CONNECTIONS",
-            "payload": {
-                "users": list(
+            'type': 'CONNECTIONS',
+            'payload': {
+                'users': list(
                     map(
                         lambda user: {
-                            "id": str(user.id),
-                            "owner": user.id == recipient_id,
+                            'id': str(user.id),
+                            'owner': user.id == recipient_id,
                         },
                         users,
                     )
@@ -64,7 +64,7 @@ def connections_msg(users: list[WebSocketServerProtocol], recipient_id: UUID):
 
 
 def position_event_msg(id: UUID, position: dict[float, float] = {'x': 0, 'y': 0}):
-    return json.dumps({"type": "PLAYER_POSITION", "payload": {"id": str(id), "position": position}})
+    return json.dumps({'type': 'PLAYER_POSITION', 'payload': {'id': str(id), 'position': position}})
 
 
 def other_users(users: set, current_user: websockets.WebSocketServerProtocol):
@@ -84,7 +84,7 @@ def send_world_state():
     if not len(world_state):
         return
 
-    world_state = {"type": "WORLD_STATE", "payload": world_state}
+    world_state = {'type': 'WORLD_STATE', 'payload': world_state}
     websockets.broadcast(USERS, json.dumps(world_state))
 
 
@@ -95,15 +95,13 @@ def process_inputs():
 
         message = MSG_QUEUE.get()
 
-        id = message.get("id")
-        seq_id = message.get("seq_id")
+        id = message.get('id')
+        seq_id = message.get('seq_id')
+        entity = ENTITIES.get(id)
 
-        ENTITIES[id].apply_input(message.get("position"))
-        LAST_PROCESSED_INPUT[id] = seq_id
-
-    for user in USERS:
-        if LAST_PROCESSED_INPUT.get(str(user.id)) is not None:
-            print(f'LPI for player {user.id}: #{LAST_PROCESSED_INPUT[str(user.id)]}.')
+        if entity:
+            ENTITIES[id].apply_input(message.get('position'))
+            LAST_PROCESSED_INPUT[id] = seq_id
 
 
 async def update():
@@ -122,7 +120,7 @@ async def handler(websocket: WebSocketServerProtocol):
         USERS.add(websocket)
         ENTITIES[str(websocket.id)] = Entity(str(websocket.id))
 
-        print("Connected user with id ", websocket.id)
+        print('Connected user with id ', websocket.id)
         await websocket.send(connections_msg(USERS, websocket.id))
         websockets.broadcast(
             other_users(USERS, websocket), user_connected_msg(websocket.id)
@@ -131,13 +129,13 @@ async def handler(websocket: WebSocketServerProtocol):
         async for message in websocket:
             event = json.loads(message)
 
-            match event.get("type"):
-                case "PLAYER_POSITION":
-                    MSG_QUEUE.put(event.get("payload"))
+            match event.get('type'):
+                case 'PLAYER_POSITION':
+                    MSG_QUEUE.put(event.get('payload'))
                 case _:
                     pass
     finally:
-        print("Disconnected user with id ", websocket.id)
+        print('Disconnected user with id ', websocket.id)
         USERS.remove(websocket)
         del ENTITIES[str(websocket.id)]
 
@@ -149,10 +147,10 @@ async def handler(websocket: WebSocketServerProtocol):
 async def main():
     update_task = asyncio.create_task(update())
 
-    async with websockets.serve(handler, "localhost", PORT):
-        print("Server is running on port", PORT)
+    async with websockets.serve(handler, 'localhost', PORT):
+        print('Server is running on port', PORT)
         await update_task
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())

@@ -1,8 +1,9 @@
 import AlpineJS, { AlpineComponent } from 'alpinejs';
 import { EventManager, EventType } from '../../managers/event-manager';
 import { WEB_SOCKET_URL } from '../../constants';
-import { Position } from '../scene/types';
+import { Position } from '../../core/types';
 
+// FIXME: This is not an UI component, therefore should not be here.
 type Connections = {
     players: Player[],
     socket: WebSocket | null,
