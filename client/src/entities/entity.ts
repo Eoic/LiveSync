@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { Position } from "../core/types";
+import { Position } from '../core/types';
 
 export class Entity {
     private _id: string;

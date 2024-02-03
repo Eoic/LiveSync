@@ -1,12 +1,12 @@
 import * as PIXI from 'pixi.js';
-import AlpineJS from 'alpinejs';
 import { Position } from '../../core/types';
 import { Entity } from '../../entities';
 import { Viewport } from 'pixi-viewport';
 import { InputManager } from '../../managers';
-import { Serializer } from '../../utils/serializer';
 import { EventType } from '../../managers/event-manager';
 import { BACKGROUND_COLOR, WORLD_HEIGHT, WORLD_WIDTH } from './constants';
+import { InMessages, OutMessages } from '../../core/webSocket';
+import { NetManager } from '../../managers/net-manager';
 
 export class Scene {
     private viewport: Viewport;
@@ -16,11 +16,11 @@ export class Scene {
     private entities: Map<string, Entity>;
     private ownerEntity: Entity | null;
     private inputSeqId: number = 0;
-    private pendingInputs: Array<object> = [];
     private refreshRateHz: number = 60;
     private serverRateHz: number = 60;
     private ticker: PIXI.Ticker;
     private serverMessages: Array<any> = [];
+    private pendingInputs: Array<OutMessages.PlayerPosition> = [];
 
     constructor() {
         this.dragTarget = null;
@@ -137,27 +137,18 @@ export class Scene {
 
         const pointerPosition = this.viewport.toWorld(InputManager.getInstance().pointerPosition);
 
-        const input = {
-            id: this.ownerEntity.id,
-            seqId: this.inputSeqId++,
-            position: pointerPosition, 
+        const positionMessage: OutMessages.PlayerPosition = {
+            type: 'PLAYER_POSITION',
+            payload: {
+                id: this.ownerEntity.id,
+                seqId: this.inputSeqId++,
+                position: pointerPosition,
+            } 
         };
 
         this.ownerEntity.applyInput(pointerPosition);
-        this.pendingInputs.push(input);
-    
-        const message = Serializer.camelToSnake({
-            type: 'PLAYER_POSITION',
-            payload: input,
-        });
-
-        const socket = AlpineJS.store('socket') as WebSocket;
-
-        if (socket.OPEN) {
-            socket.send(JSON.stringify(message));
-        } else {
-            console.warn('WebSocket connection is not open, cannot send position.');
-        }
+        this.pendingInputs.push(positionMessage);
+        NetManager.send(positionMessage);
     }
 
     processServerMessages() {
@@ -175,9 +166,9 @@ export class Scene {
                     let j = 0;
 
                     while (j < this.pendingInputs.length) {
-                        let input = this.pendingInputs[j] as any;
+                        let input = this.pendingInputs[j].payload;
 
-                        if ((input as any).input_seq_id <= (data as any).last_processed_input) {
+                        if (input.seqId <= (data as any).last_processed_input) {
                             this.pendingInputs.splice(j, 1);
                         } else {
                             this.ownerEntity.applyInput(input.position);
