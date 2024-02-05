@@ -1,42 +1,53 @@
 /**
+ * Message types.
+ */
+export enum IncMessageType {
+    PlayerConnection = 'PLAYER_CONNECTION',
+    PlayerConnections = 'PLAYER_CONNECTIONS',
+    PlayerDisconnection = 'PLAYER_DISCONNECTION',
+    PlayerPosition = 'PLAYER_POSITION',
+    WorldState = 'WORLD_STATE',
+};
+
+export enum OutMessageType {
+    PlayerPosition = 'PLAYER_POSITION',
+};
+
+/**
  * Defines message payload types coming
  * from the server over WebSocket connection.
  */
-namespace InMessages {
-    namespace Types {
-        export type Player = {
-            id: string,
-            owner: boolean,
-            position: {
-                x: number,
-                y: number,
-            }
-        };
-    };
-
-    export type PlayerConnect = {
-        type: 'PLAYER_CONNECT',
+type IncMessages = {
+    PlayerConnection: {
+        type: IncMessageType.PlayerConnection,
         payload: {
             id: string
         }
-    };
+    },
 
-    export type PlayerDisconnect = {
-        type: 'PLAYER_DISCONNECT',
+    PlayerDisconnection: {
+        type: IncMessageType.PlayerDisconnection,
         payload: {
             id: string
         }
-    };
+    },
 
-    export type PlayerConnections = {
-        type: 'PLAYER_CONNECTIONS',
+    PlayerConnections: {
+        type: IncMessageType.PlayerConnections,
         payload: {
-            players: Array<Types.Player>
+            players: Array<{
+                id: string,
+                owner: boolean,
+                position: {
+                    x: number,
+                    y: number,
+                }
+            }>
         }
-    };
+    },
 
-    export type PlayerPosition = {
-        type: 'PLAYER_POSITION',
+    PlayerPosition: {
+        type: IncMessageType.PlayerPosition,
         payload: {
             id: string,
             position: {
@@ -44,10 +55,10 @@ namespace InMessages {
                 y: number
             }
         }
-    };
+    },
 
-    export type WorldState = {
-        type: 'WORLD_STATE',
+    WorldState: {
+        type: IncMessageType.WorldState,
         payload: {
             id: string,
             position: {
@@ -56,16 +67,16 @@ namespace InMessages {
             },
             lastProcessedInput: number
         }
-    };
+    },
 };
 
 /**
  * Defines message payload types 
- * send to the server over WebSocket connection.
+ * sent to the server over WebSocket connection.
  */
-namespace OutMessages {
-    export type PlayerPosition = {
-        type: 'PLAYER_POSITION'
+type OutMessages = {
+    PlayerPosition: {
+        type: OutMessageType.PlayerPosition
         payload: {
             id: string,
             seqId: number,
@@ -74,7 +85,9 @@ namespace OutMessages {
                 y: number
             }
         },
-    };
+    },
 };
 
-export type { InMessages, OutMessages };
+type ValuesType<T> = T[keyof T];
+export type IncWebSocketMessage = ValuesType<IncMessages>;
+export type OutWebSocketMessage = ValuesType<OutMessages>;
